@@ -70,6 +70,9 @@ with st.spinner("جاري الاتصال بـ بورصة العقود وتحدي
             
             last_row = hist.iloc[-1]
             current_price = last_row['Close']
+            
+            # شرط حماية إضافي للتأكد من جودة البيانات الواردة للسرعة السحابية
+            if current_price is None or pd.isna(current_price): continue
             current_prices_dict[ticker] = current_price
             
             status = "انتظار نقطة دخول فنية ⏳"
@@ -84,54 +87,57 @@ with st.spinner("جاري الاتصال بـ بورصة العقود وتحدي
             })
             time.sleep(0.2) 
         except: pass
-# --- محرك الشراء الآلي لعقود الخيارات الحقيقية ---
+# --- محرك الشراء الآلي لعقود الخيارات الحقيقية (نسخة الأمان السحابي المحدثة) ---
 total_investment_cost = portfolio_df["Total_Cost"].sum() if not portfolio_df.empty else 0.0
 current_cash = INITIAL_CASH - total_investment_cost
 
 for res in results:
     t_name = res["الرمز (Ticker)"]
     if res["حالة الفحص"] == "ناجح (حلال + فني) ✅" and t_name not in portfolio_df["Ticker"].values:
-        cur_stock_price = current_prices_dict[t_name]
-        
-        # 1. صياغة تفاصيل العقد (Strike قريب من سعر السهم، وانتهاء بعد شهر تلقائياً)
-        strike = round(cur_stock_price)
-        exp_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
-        
-        # 2. حساب قيمة العربون التقديرية للعقد (Premium) وتكون عادة حوالي 4% من سعر السهم
-        estimated_premium = round(cur_stock_price * 0.04, 2)
-        contract_cost = estimated_premium * 100 * 1  # العقد يتحكم بـ 100 سهم
-        
-        # صياغة رمز العقد الرسمي القياسي للبورصة الأمريكية OCC
-        strike_code = str(strike).zfill(5) + "000"
-        contract_symbol = f"{t_name}{exp_date[2:]}C{strike_code}"
-        
-        if current_cash >= contract_cost:
-            new_contract = pd.DataFrame([{
-                "Ticker": t_name,
-                "Contract_Symbol": contract_symbol,
-                "Type": "🟢 Call Option",
-                "Strike": strike,
-                "Expiration": exp_date,
-                "Buy_Premium": estimated_premium,
-                "Qty": 1,
-                "Target_Premium": round(estimated_premium * 1.50, 2), # هدف ربح 50%
-                "Stop_Premium": round(estimated_premium * 0.90, 2),    # وقف خسارة 10%
-                "Total_Cost": contract_cost
-            }])
-            portfolio_df = pd.concat([portfolio_df, new_contract], ignore_index=True)
-            save_portfolio(portfolio_df)
-            st.toast(f"🚀 [تداول آلي]: تم شراء عقد خيار {contract_symbol} تلقائياً!")
-            time.sleep(0.5)
-            st.rerun()
+        if t_name in current_prices_dict and current_prices_dict[t_name] is not None:
+            cur_stock_price = current_prices_dict[t_name]
+            
+            try:
+                # 1. صياغة تفاصيل العقد (Strike قريب من سعر السهم، وانتهاء بعد شهر تلقائياً)
+                strike = round(cur_stock_price)
+                exp_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
+                
+                # 2. حساب قيمة العربون التقديرية للعقد (Premium)
+                estimated_premium = round(cur_stock_price * 0.04, 2)
+                contract_cost = estimated_premium * 100 * 1  
+                
+                # صياغة رمز العقد الرسمي القياسي للبورصة الأمريكية OCC
+                strike_code = str(strike).zfill(5) + "000"
+                contract_symbol = f"{t_name}{exp_date[2:]}C{strike_code}"
+                
+                if current_cash >= contract_cost:
+                    new_contract = pd.DataFrame([{
+                        "Ticker": t_name,
+                        "Contract_Symbol": contract_symbol,
+                        "Type": "🟢 Call Option",
+                        "Strike": strike,
+                        "Expiration": exp_date,
+                        "Buy_Premium": estimated_premium,
+                        "Qty": 1,
+                        "Target_Premium": round(estimated_premium * 1.50, 2), 
+                        "Stop_Premium": round(estimated_premium * 0.90, 2),    
+                        "Total_Cost": contract_cost
+                    }])
+                    portfolio_df = pd.concat([portfolio_df, new_contract], ignore_index=True)
+                    save_portfolio(portfolio_df)
+                    st.toast(f"🚀 [تداول آلي]: تم شراء عقد خيار {contract_symbol} تلقائياً!")
+                    time.sleep(0.5)
+                    st.rerun()
+            except: pass
 
-# --- حساب الأرصدة الحية لمحفظة العقود مع الرافعة المالية تماثلاً للواقع ---
+# --- حساب الأرصدة الحية لمحفظة العقود مع الرافعة المالية ---
 current_portfolio_value = 0.0
 if not portfolio_df.empty:
     for _, row in portfolio_df.iterrows():
         t = row["Ticker"]
-        if t in current_prices_dict:
+        if t in current_prices_dict and current_prices_dict[t] is not None:
             stock_change = (current_prices_dict[t] - (row["Total_Cost"] / 100)) / (row["Total_Cost"] / 100)
-            simulated_current_premium = row["Buy_Premium"] * (1 + (stock_change * 5)) # Leverage 5x
+            simulated_current_premium = row["Buy_Premium"] * (1 + (stock_change * 5)) 
             current_portfolio_value += max(0.1, simulated_current_premium) * 100 * int(row["Qty"])
 
 net_profit_loss = current_portfolio_value - total_investment_cost
@@ -159,7 +165,7 @@ else:
         t = row["Ticker"]
         cost = float(row["Total_Cost"])
         
-        if t in current_prices_dict:
+        if t in current_prices_dict and current_prices_dict[t] is not None:
             stock_change = (current_prices_dict[t] - row["Buy_Premium"]) / row["Buy_Premium"]
             cur_premium = max(0.05, row["Buy_Premium"] * (1 + (stock_change * 5)))
         else:
@@ -187,7 +193,7 @@ else:
 
 st.markdown("---")
 
-# جدول تصفية الشركات الملون المعتاد
+# جدول تصفية الشركات الملون
 if results:
     df = pd.DataFrame(results)
     styled_df = df.style.map(color_passed_rows, subset=["حالة الفحص"])
