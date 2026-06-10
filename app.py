@@ -42,6 +42,7 @@ def color_passed_rows(val):
 results = []
 current_prices_dict = {}
 hist_data_dict = {}
+passed_companies = []  # قائمة لحفظ الشركات الناجحة من أجل التصميم الجمالي
 
 with st.spinner("جاري مسح البورصة الحية وتطبيق الفلاتر الستة الصارمة..."):
     for ticker in WATCHLIST:
@@ -61,23 +62,19 @@ with st.spinner("جاري مسح البورصة الحية وتطبيق الفل
             eps_growth = info.get("earningsGrowth", 0) * 100
             
             # حساب المؤشرات الفنية المتقدمة
-            # أ. المتوسطات المتحركة الأسية (EMA 50/200)
             hist['EMA_50'] = hist['Close'].ewm(span=50, adjust=False).mean()
             hist['EMA_200'] = hist['Close'].ewm(span=200, adjust=False).mean()
             
-            # ب. مؤشر القوة النسبية (RSI 14)
             delta = hist['Close'].diff()
             gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
             loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
             hist['RSI_14'] = 100 - (100 / (1 + (gain / loss)))
             
-            # ج. مؤشر الماكد (MACD)
             hist['EMA_12'] = hist['Close'].ewm(span=12, adjust=False).mean()
             hist['EMA_26'] = hist['Close'].ewm(span=26, adjust=False).mean()
             hist['MACD'] = hist['EMA_12'] - hist['EMA_26']
             hist['Signal_Line'] = hist['MACD'].ewm(span=9, adjust=False).mean()
             
-            # د. مؤشر البولنجر باندز (Bollinger Bands)
             hist['MA20'] = hist['Close'].rolling(window=20).mean()
             hist['STD20'] = hist['Close'].rolling(window=20).std()
             hist['Upper_Band'] = hist['MA20'] + (hist['STD20'] * 2)
@@ -97,6 +94,7 @@ with st.spinner("جاري مسح البورصة الحية وتطبيق الفل
             elif last_row['Close'] >= last_row['Upper_Band']: status = "انتظار (السعر مرتفع عند قمة البولنجر) ⚠️"
             else:
                 status = "إشارة شراء مؤكدة (ناجح) 🚀"
+                passed_companies.append({"ticker": ticker, "price": round(current_price, 2), "rsi": round(last_row['RSI_14'], 1)})
                 
             results.append({
                 "الرمز (Ticker)": ticker, "السعر الحالي": round(current_price, 2), "حالة الفحص": status,
@@ -148,7 +146,6 @@ if not portfolio_df.empty:
             cur_premium = max(0.05, float(row["Buy_Premium"]) * (1 + (stock_change * 5))) # Leverage 5x
             current_portfolio_value += cur_premium * 100 * int(row["Qty"])
             
-            # دالة البيع التلقائي عند ضرب الأهداف أو عكس الاتجاه الفني للمؤشرات الجديدة
             for r in results:
                 if r["الرمز (Ticker)"] == t:
                     if cur_premium >= float(row["Target_Premium"]) or cur_premium <= float(row["Stop_Premium"]) or "مستبعد" in r["حالة الفحص"]:
@@ -161,7 +158,33 @@ if not portfolio_df.empty:
 net_profit_loss = current_portfolio_value - total_investment_cost
 total_account_equity = current_cash + current_portfolio_value
 pnl_percentage = (net_profit_loss / total_investment_cost * 100) if total_investment_cost > 0 else 0.0
-# --- 5. عرض لوحة التحكم على شاشة المستخدم ---
+# --- 5. عرض لوحة التحكم على شاشة المستخدم واجهة التصميم الجمالي ---
+
+# أ. عرض الفرص الذهبية المجتازة للفحص في الصدارة بتصميم احترافي
+st.write("### 🔥 الفرص الذهبية والشركات المجتازة للفحص السداسي الآن:")
+if passed_companies:
+    # إنشاء أعمدة ديناميكية بناءً على عدد الشركات الناجحة لعرضها جنباً إلى جنب
+    cols_passed = st.columns(len(passed_companies))
+    for idx, comp in enumerate(passed_companies):
+        with cols_passed[idx]:
+            # عرض بطاقة خضراء مخصصة وجميلة لكل شركة تجتاز الفحص بنجاح
+            st.markdown(
+                f"""
+                <div style='background-color: #d4edda; padding: 20px; border-radius: 10px; border: 2px solid #28a745; text-align: center;'>
+                    <h2 style='color: #155724; margin: 0;'>🚀 {comp['ticker']}</h2>
+                    <p style='color: #155724; font-size: 16px; margin: 10px 0 5px 0;'><b>السعر الحالي:</b> ${comp['price']}</p>
+                    <p style='color: #155724; font-size: 14px; margin: 0;'><b>مؤشر RSI الحالية:</b> {comp['rsi']}</p>
+                    <span style='background-color: #28a745; color: white; padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; display: inline-block; margin-top: 10px;'>جاهز للتداول الآلي</span>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+else:
+    st.info("ℹ️ لا توجد أسهم في منطقة الدخول المثالية حالياً. البوت يراقب البورصة بصمت واحترافية لاقتناص الفرصة القادمة.")
+
+st.markdown("---")
+
+# ب. الموقف المالي للمحفظة الاستثمارية
 st.subheader("💰 الموقف المالي للمحفظة الاستثمارية")
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 m_col1.metric("💵 الرصيد الافتتاحي", f"${INITIAL_CASH:,.2f}")
@@ -174,6 +197,7 @@ else:
 
 st.markdown("---")
 
+# ج. العقود المفتوحة وموجودات الحساب الحالية
 st.subheader("💼 العقود المفتوحة وموجودات الحساب الحالية")
 if portfolio_df.empty:
     st.info("ℹ️ محفظتك خالية من العقود حالياً وبوت الاستراتيجية السداسية يمسح السوق للاقتناص الآمن.")
@@ -204,6 +228,7 @@ else:
 
 st.markdown("---")
 
+# د. جدول الفحص السداسي الفوري لجميع الشركات
 if results:
     df = pd.DataFrame(results)
     styled_df = df.style.map(color_passed_rows, subset=["حالة الفحص"])
@@ -212,7 +237,8 @@ if results:
 
 st.markdown("---")
 
+# هـ. الرسم البياني التفاعلي الآمن
 st.subheader("📈 الرسم البياني التفاعلي وحركة السهم")
 selected_ticker = st.selectbox("اختر شركة لاستعراض مخططها السعري التاريخي ولتتبع حركتها ومؤشراتها:", WATCHLIST)
 if selected_ticker in hist_data_dict:
-    st.line_chart(hist_data_dict[selected_ticker][['Close', 'EMA_50', 'EMA_200']])
+    st.line_chart(hist_data_dict[selected_ticker]['Close'])
