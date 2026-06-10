@@ -5,46 +5,17 @@ import os
 import time
 from datetime import datetime, timedelta
 
-# --- إعدادات الحماية والأمان المتقدمة المحدثة ---
-st.set_page_config(page_title="منصة التداول الإلكتروني المؤمنة", layout="wide")
-
-# نظام الأمان الاحتياطي الذكي لمنع تعليق خوادم السحابة
-try:
-    USER_AUTH = st.secrets["username"]
-    PASS_AUTH = st.secrets["password"]
-except Exception:
-    # قيم أمان افتراضية بديلة في حال لم يتم إعداد الخزنة السرية بنجاح
-    USER_AUTH = "admin"
-    PASS_AUTH = "1234"
-
-# تفعيل خاصية حفظ كلمة السر تلقائياً داخل المتصفح
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    st.title("🔒 شاشة الدخول الآمنة لمنصة التداول")
-    username = st.text_input("اسم المستخدم:")
-    password = st.text_input("كلمة المرور:", type="password")
-    
-    remember_me = st.checkbox("تذكرني على هذا الجهاز (حفظ تسجيل الدخول) 🔑", value=True)
-    
-    if st.button("🔓 تسجيل الدخول"):
-        if username == USER_AUTH and password == PASS_AUTH:
-            st.session_state.authenticated = True
-            st.success("تم التحقق بنجاح! جاري فتح المنصة...")
-            time.sleep(0.5)
-            st.rerun()
-        else:
-            st.error("❌ البيانات خاطئة! يرجى التأكد من اسم المستخدم أو الرقم السري.")
-    st.stop()
+# --- إعدادات المنصة الكلية للسحابة (النسخة المفتوحة بدون شاشة قفل) ---
+st.set_page_config(page_title="منصة التداول الإلكتروني المتقدمة للخيارات", layout="wide")
 
 # =========================================================================
-# فتح لوحة التحكم بعد نجاح الأمان وحفظ حالة الدخول
+# الدخول مباشر فوراً إلى لوحة التحكم والبطاقات الخضراء
 # =========================================================================
 st.title("⚡ منصة التداول الآلي الفوري بالاستراتيجية السداسية الصارمة")
 
 PORTFOLIO_FILE = "tradier_simulator_portfolio.csv"
 INITIAL_CASH = 100000.0  
+
 WATCHLIST = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "AMD", "META"]
 
 if st.sidebar.button("🗑️ تصفية وتصفير الحساب والبدء من جديد"):
@@ -155,7 +126,7 @@ for res in results:
                     }])
                     portfolio_df = pd.concat([portfolio_df, new_contract], ignore_index=True)
                     save_portfolio(portfolio_df)
-                    st.toast(f"🚀 [تداول آلي]: تم شراء عقد خيار {contract_symbol} تلقائياً!")
+                    st.toast(f"🚀 [تداول آلي]: تم تفعيل عقد خيار {contract_symbol} بناءً على الاستراتيجية السداسية!")
                     time.sleep(0.5)
                     st.rerun()
             except: pass
@@ -169,7 +140,7 @@ if not portfolio_df.empty:
             cur_p = current_prices_dict[t]
             buy_p = float(row["Strike"])
             stock_change = (cur_p - buy_p) / buy_p
-            cur_premium = max(0.05, float(row["Buy_Premium"]) * (1 + (stock_change * 5))) # الرافعة المالية 5 أضعاف السهم
+            cur_premium = max(0.05, float(row["Buy_Premium"]) * (1 + (stock_change * 5))) # Leverage 5x
             current_portfolio_value += cur_premium * 100 * int(row["Qty"])
             
             for r in results:
